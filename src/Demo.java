@@ -1,7 +1,11 @@
 import java.io.File;
 import java.net.URL;
+
 import org.bytedeco.javacv.*;
 import org.bytedeco.javacpp.*;
+import org.bytedeco.javacpp.opencv_core.CvPoint2D32f;
+
+import static org.bytedeco.javacpp.ARToolKitPlus.*;
 import static org.bytedeco.javacpp.opencv_core.*;
 import static org.bytedeco.javacpp.opencv_imgproc.*;
 import static org.bytedeco.javacpp.opencv_calib3d.*;
@@ -39,8 +43,24 @@ public class Demo {
         if (classifier.isNull()) {
             System.err.println("Error loading classifier file \"" + classifierName + "\".");
             System.exit(1);
-        }
+        }              
 
+        //Test CvPoint32
+        CvPoint2D32f p=new CvPoint2D32f(2);
+        p.put(2.1,1.5);
+        p.position(1).put(3.2,1.6);
+        System.out.println("p: "+p);
+        
+        CvPoint2D32f p2=new CvPoint2D32f(2);
+        p.position(0);
+        p2.put(p.x(),p.y());
+        p2.position(1);
+        p.position(1);
+        p2.put(p.x(),p.y());
+        p.put(4.4,4.5);
+        System.out.println("p: "+p);
+        System.out.println("p2: "+p2);
+        
         // The available FrameGrabber classes include OpenCVFrameGrabber (opencv_highgui),
         // DC1394FrameGrabber, FlyCaptureFrameGrabber, OpenKinectFrameGrabber,
         // PS3EyeFrameGrabber, VideoInputFrameGrabber, and FFmpegFrameGrabber.
@@ -49,8 +69,14 @@ public class Demo {
         System.out.println("Using grabber: "+FrameGrabber.list.get(frameGrabberIdx)+", and camIdx: "+camIdx);
         FrameGrabber grabber = FrameGrabber.create(FrameGrabber.list.get(frameGrabberIdx),camIdx);
         //FFmpegFrameGrabber grabber =new FFmpegFrameGrabber("video=Integrated Camera");
-        //grabber.setFormat("dshow");
-        //FFmpegFrameGrabber grabber =new FFmpegFrameGrabber("0");
+        
+        /*
+        FFmpegFrameGrabber grabber = new FFmpegFrameGrabber("desktop");
+        grabber.setBitsPerPixel(8);
+        grabber.setFormat("gdigrab");
+        
+        grabber.setFrameRate(10);        //FFmpegFrameGrabber grabber =new FFmpegFrameGrabber("0");
+        */
         //grabber.setFormat("vfwcap");        
         
         //FrameGrabber grabber = FrameGrabber.createDefault(frameGrabberIdx);
