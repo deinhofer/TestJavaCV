@@ -24,8 +24,8 @@ import static org.bytedeco.javacpp.opencv_video.*;
 import static org.bytedeco.javacpp.opencv_highgui.*;
 
 public class OpticalFlowTracker {
-    private static final int MAX_CORNERS = 50;
-	private static CanvasFrame frame=new CanvasFrame("Test");
+    private static final int MAX_CORNERS = 6;
+	private static CanvasFrame frame;
 	private static FaceDetection faceDetection=new FaceDetection();
 	private static CvRect roiRect=null;
 	private static CvRect faceRect=null;
@@ -34,21 +34,21 @@ public class OpticalFlowTracker {
     static IntPointer corner_count;
     static int flags=0;
 
+    IplImage[] imgGrey=new IplImage[2];
+    IplImage[] imgPyr=new IplImage[2];
 
+    
 
     public static void main(String[] args) throws Exception {
-        // Load two images and allocate other structures
-/*        IplImage imgA = cvLoadImage(
-                "image0.png",
-                CV_LOAD_IMAGE_GRAYSCALE);
-        IplImage imgB = cvLoadImage(
-                "image1.png",
-                CV_LOAD_IMAGE_GRAYSCALE);
-*/
 		Loader.load(opencv_objdetect.class);
 
     	corner_count=new IntPointer(1).put(MAX_CORNERS);
-		FrameGrabber grabber = FrameGrabber.create(FrameGrabber.list.get(5),0);
+		FrameGrabber grabber = FrameGrabber.create(FrameGrabber.list.get(6),0);
+		grabber.setImageWidth(320);
+		grabber.setImageHeight(240);
+		
+		for(int n=0;n<4;n++) {
+		frame=new CanvasFrame("Test");
 		grabber.start();
 
 		boolean running=true;
@@ -57,26 +57,29 @@ public class OpticalFlowTracker {
 
 		int width  = img.width();
 		int height = img.height();
-		CvRect roiRect= cvRect(0,0,width,height);
+		roiRect= cvRect(0,0,width,height);
 		IplImage imgA    = IplImage.create(width, height, IPL_DEPTH_8U, 1);
 		cvCvtColor(img, imgA, CV_BGR2GRAY);
 		flags=0;
 		
-        CvSize pyr_sz = cvSize(imgA.width() + 8, imgA.height() / 3);
+        CvSize pyr_sz = cvSize(imgA.width(), imgA.height());
 
         IplImage pyrA = IplImage.create(pyr_sz, IPL_DEPTH_8U, 1);
         IplImage pyrB = IplImage.create(pyr_sz, IPL_DEPTH_8U, 1);
 		CvPoint2D32f cornersA=null;
 		
-		while(running) {
+		//while(running) {
+		for(int f=0;f<200;f++) {
 			
 			img=grabber.grab();
 			cvFlip(img, img, 1);
 
 			IplImage imgB    = IplImage.create(width, height, IPL_DEPTH_8U, 1);
 			cvCvtColor(img, imgB, CV_BGR2GRAY);
+			cvSetImageROI(imgB,roiRect);
 
 			if(cornersA==null || corner_count.get()==0) {
+				cvResetImageROI(imgA);
 				cornersA = findFeatures(imgA);
 				System.out.println("after findFeatures: corner_count.get(): "
 						+ corner_count.get());
@@ -87,12 +90,18 @@ public class OpticalFlowTracker {
 				cvSetImageROI(imgB,roiRect);
 				cvSetImageROI(pyrA,roiRect);
 				cvSetImageROI(pyrB,roiRect);
-				cvSetImageROI(img,roiRect);
+				//cvSetImageROI(img,roiRect);
 				
-				CvPoint2D32f cornersB = imageGrabbed(imgA, imgB, img, cornersA,
+				CvPoint2D32f cornersB = trackOpticalFlow(imgA, imgB, cornersA,
 						pyrA, pyrB);
 				cornersA = cornersB;
+				flags|=CV_LKFLOW_PYR_A_READY;
+				
+				drawPoints(img,cornersB);
 			}
+			
+	        frame.showImage(img);
+
 			imgA=imgB;			
 			//Pointer.memcpy(cornersA, cornersB, cornersA.sizeof());
 			pyrA=pyrB;
@@ -101,6 +110,9 @@ public class OpticalFlowTracker {
 		}
 		grabber.stop();
 		frame.dispose();
+
+		}
+		
 /*
 
         cvSaveImage(
@@ -112,17 +124,7 @@ public class OpticalFlowTracker {
         */
     }
     
-    public static CvPoint2D32f imageGrabbed(IplImage imgA, IplImage imgB, IplImage img, CvPoint2D32f cornersA, IplImage pyrA, IplImage pyrB) {
-
-        // IplImage imgC = cvLoadImage("OpticalFlow1.png",
-        // CV_LOAD_IMAGE_UNCHANGED);
-        /*
-        IplImage imgC = cvLoadImage(
-                "image0.png",
-                CV_LOAD_IMAGE_UNCHANGED);
-        */
-        
-       
+    public static CvPoint2D32f trackOpticalFlow(IplImage imgA, IplImage imgB, CvPoint2D32f cornersA, IplImage pyrA, IplImage pyrB) {
         // Call Lucas Kanade algorithm
         BytePointer features_found = new BytePointer(MAX_CORNERS);
         FloatPointer feature_errors = new FloatPointer(MAX_CORNERS);
@@ -132,33 +134,48 @@ public class OpticalFlowTracker {
                 corner_count.get(), cvSize(win_size, win_size), 5,
                 features_found, feature_errors,
                 cvTermCriteria(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 20, 0.3),flags);
-
-        System.out.println("corner_count.get(): "+corner_count.get());
-        int newCornerCount=0;
         
+        return rejectBadPoints(cornersA, cornersB, features_found, feature_errors);
+    }
+    
+    private static CvPoint2D32f rejectBadPoints(CvPoint2D32f cornersA, CvPoint2D32f cornersB, BytePointer features_found, FloatPointer feature_errors) {
+        int newCornerCount=0;
+        CvPoint2D32f newCorners = new CvPoint2D32f(MAX_CORNERS);
+                
         // Make an image of the results
         for (int i = 0; i < corner_count.get(); i++) {
             if (features_found.get(i) == 0 || feature_errors.get(i) > 550) {
                 System.out.println("Error is " + feature_errors.get(i) + "/n");
                 continue;
             }
-            System.out.println("Got it/n");
-            newCornerCount++;
+            //System.out.println("Got it/n");
             cornersA.position(i);
             cornersB.position(i);
-            CvPoint p0 = cvPoint(Math.round(cornersA.x()),
-                    Math.round(cornersA.y()));
-            CvPoint p1 = cvPoint(Math.round(cornersB.x()),
-                    Math.round(cornersB.y()));
-            System.out.println("p1: "+p1);
-            //cvLine(img, p0, p1, CV_RGB(255, 0, 0), 
-            //        2, 8, 0);
-            cvCircle(img, p1, 4, CV_RGB(255, 0, 0), 2, 8, 0);
-        }
-        corner_count.put(newCornerCount);
-        frame.showImage(img);
+            
+            newCorners.position(newCornerCount);
+            newCorners.put((double)cornersB.x(),(double)cornersB.y());
+            newCornerCount++;
+            
+        }    	
 
-        return cornersB;
+        corner_count.put(newCornerCount);
+        newCorners.position(0);
+        System.out.println("new corner_count: "+corner_count.get());
+
+        return newCorners;
+    }
+    
+    public static void drawPoints(IplImage img, CvPoint2D32f corners) {   	
+        for (int i = 0; i < corner_count.get(); i++) {
+        	corners.position(i);
+			CvPoint p = cvPoint(Math.round(corners.x()),
+					Math.round(corners.y()));
+			System.out.println("p"+i+": " + p);
+			// cvLine(img, p0, p1, CV_RGB(255, 0, 0),
+			// 2, 8, 0);
+			cvCircle(img, p, 4, CV_RGB(255, 0, 0), 2, 5, 0);
+        }
+        corners.position(0);
     }
     
     public static CvPoint2D32f findFeatures(IplImage imgA) {
@@ -168,44 +185,40 @@ public class OpticalFlowTracker {
 			if(faceRect!=null) { 
 				System.out.println("Found face at: "+faceRect);
 				
-				roiRect=faceRect;
+				//roiRect=faceRect;
 				
 				int x = faceRect.x() + faceRect.width() / 2;
 				int y = faceRect.y() + faceRect.height() / 2;
-				CvPoint initNose=cvPoint(x,y);
-				CvPoint initChin=cvPoint(x,y+10);
-
-				System.out.println("faceRect before findCornerSubPix: "+faceRect);
-
-				//CvSize img_sz = cvGetSize(imgA);
-
-				// Get the features for tracking
-				//IplImage eig_image = IplImage.create(img_sz, IPL_DEPTH_8U, 1);
-				//IplImage tmp_image = IplImage.create(img_sz, IPL_DEPTH_8U, 1);
+				CvPoint initNose[]=new CvPoint[]{cvPoint(x,y-10),cvPoint(x-20,y-10),cvPoint(x+20,y-10),cvPoint(x,y+10)};
+				CvPoint initChin[]=new CvPoint[]{cvPoint(x,y+65),cvPoint(x,y+55)};
 
 				CvPoint2D32f cornersA = new CvPoint2D32f(MAX_CORNERS);
-
 				CvArr mask = null;
-				cornersA.put(initNose);
-				corner_count.put(1);
+				
+				cornersA=addCvPoints(cornersA,initNose);
+				cornersA=addCvPoints(cornersA,initChin);
+				corner_count.put(cornersA.position());
+				cornersA.position(0);
+				
+				//Setting image ROI should improve tracking quality, but disabled it so far
 				cvSetImageROI(imgA,roiRect);
 				//cvSetImageROI(imgA,faceRect);
 				//cvSetImageROI(imgA,faceRect);
-/*
-				cvGoodFeaturesToTrack(imgA, null, null, cornersA,
-						corner_count, 0.05, 5.0, mask, 3, 0, 0.04);
-*/
 				
+				//Uses given points and tries to find better trackable ones in the neighbourhood.
+				//cvTermCriteria is set to 1, 1 because otherwise the new points would be too far away. 
 				cvFindCornerSubPix(
 						imgA,
 						cornersA,
 						corner_count.get(),
 						cvSize(win_size, win_size),
 						cvSize(-1, -1),
-						cvTermCriteria(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 20, 0.03));
+//						cvTermCriteria(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 20, 0.03));
+				cvTermCriteria(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 1, 1));
+						
 				//cvResetImageROI(imgA);
 
-				System.out.println("cornersA: "+cornersA);
+				System.out.println("Found trackable points: cornersA: "+cornersA);
 				return cornersA;
 			}			
 		} catch (java.lang.Exception e) {
@@ -213,5 +226,13 @@ public class OpticalFlowTracker {
 			e.printStackTrace();
 		}
 		return null;
+    }
+    
+    private static CvPoint2D32f addCvPoints(CvPoint2D32f corners, CvPoint[] points) {
+    	for(CvPoint point : points) {
+    		corners.put(point);
+    		corners.position(corners.position()+1);
+    	}
+    	return corners;
     }
 }
