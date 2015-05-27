@@ -5,6 +5,8 @@
  * burgetrm@gmail.com
  */
 
+import java.beans.PropertyVetoException;
+
 import org.bytedeco.javacpp.BytePointer;
 import org.bytedeco.javacpp.FloatPointer;
 import org.bytedeco.javacpp.IntPointer;
@@ -37,7 +39,7 @@ public class OpticalFlowTracker {
     private static final int B=1;
 
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) throws Exception, PropertyVetoException, org.bytedeco.javacv.ProjectiveDevice.Exception {
 		Loader.load(opencv_objdetect.class);
 
 		//Init
@@ -46,10 +48,23 @@ public class OpticalFlowTracker {
 	    CvPoint2D32f[] points=new CvPoint2D32f[2];
 	    
     	nrPoints=new IntPointer(1).put(MAX_POINTS);
-		FrameGrabber grabber = FrameGrabber.create(FrameGrabber.list.get(6),0);
+    	/*
+		FrameGrabber grabber = FrameGrabber.create(FrameGrabber.list.get(5),1);
 		grabber.setImageWidth(320);
 		grabber.setImageHeight(240);
-		
+		grabber.setTimeout(20000);
+		*/
+    	
+    	CameraDevice.Settings devSet=new CameraDevice.SettingsImplementation();
+    	devSet.setName("MyCam");
+    	devSet.setFrameGrabber(FrameGrabber.get("VideoInput"));
+    	devSet.setDeviceNumber(1);
+    	devSet.setTimeout(20000);
+    	devSet.setImageWidth(320);
+    	devSet.setImageHeight(240);    	
+    	
+    	CameraDevice dev=new CameraDevice(devSet);    	
+    	FrameGrabber grabber=dev.createFrameGrabber();
 		frame=new CanvasFrame("Test");
 		grabber.start();
 
