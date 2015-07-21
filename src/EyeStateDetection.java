@@ -91,8 +91,6 @@ public class EyeStateDetection {
         IplImage grayImage    = IplImage.create(width, height, IPL_DEPTH_8U, 1);
         IplImage grayImage_hist  = IplImage.create(width, height, IPL_DEPTH_8U, 1);
 
-        Mat src=new Mat(grayImage);
-    	Mat dst=new Mat(grayImage_hist);
         // Objects allocated with a create*() or clone() factory method are automatically released
         // by the garbage collector, but may still be explicitly released by calling release().
         // You shall NOT call cvReleaseImage(), cvReleaseMemStorage(), etc. on objects allocated this way.
@@ -107,10 +105,12 @@ public class EyeStateDetection {
 
         // We can allocate native arrays using constructors taking an integer as argument.
         CvPoint hatPoints = new CvPoint(3);
+        int markerCountNotDetected =1;
 
         CvRect faceRect=null;
         while (frame.isVisible() && (grabbedImage = grabber.grab()) != null) {
         	
+
         	//if(faceRect==null) {
 	            cvClearMemStorage(storage);
 	
@@ -141,8 +141,15 @@ public class EyeStateDetection {
 	        
 	                
 	                //cvRectangle(grabbedImage, cvPoint(x, y), cvPoint(x+w, y+h), CvScalar.RED, 1, CV_AA, 0);
-	               cvRectangle(grabbedImage, cvPoint(x, y), cvPoint(x+w, y+h), CvScalar.RED, 1, CV_AA, 0);
+	                
+	                
+	                if (markerCountNotDetected>15){
+	               cvRectangle(grabbedImage, cvPoint(x, y), cvPoint(x+w, y+h), CvScalar.BLUE, 1, CV_AA, 0);
+	                } else
+	                { 
+	 	               cvRectangle(grabbedImage, cvPoint(x, y), cvPoint(x+w, y+h), CvScalar.RED, 1, CV_AA, 0);
 
+	                }
 	                /*
 	                // To access or pass as argument the elements of a native array, call position() before.
 	                hatPoints.position(0).x(x-w/10)   .y(y-h/10);
@@ -154,22 +161,33 @@ public class EyeStateDetection {
 	            if(faceRect!=null){
 	            	cvSetImageROI(grayImage,  faceRect);
 	            	
-	            	
-	            	equalizeHist(src , dst);
-	            	grayImage_hist=dst.asIplImage();
+	            	Mat grayImage_histMat=new Mat(grayImage_hist);
+	            	equalizeHist( new Mat(grayImage), grayImage_histMat);
 
 	            	CvSeq circles = cvHoughCircles( 
-	            			grayImage_hist, //Input image
+	            			//grayImage_histMat.asIplImage(), //Input image
+	            			grayImage,
 	            			mem, //Memory Storage
 	            			CV_HOUGH_GRADIENT, //Detection method
 	            			1, //Inverse ratio
-	            			60, //Minimum distance between the centers of the detected circles
-	            			20, //Higher threshold for canny edge detector
-	            			10, //Threshold at the center detection stage
-	            			3, //min radius
+	            			20, //Minimum distance between the centers of the detected circles
+	            			26, //Higher threshold for canny edge detector
+	            			13, //Threshold at the center detection stage
+	            			2, //min radius
 	            			6 //max radius
 	            			);
+	            	
+	            	if (circles.total() !=0)
+	            	{
+	            		markerCountNotDetected=1;
+	            	}
+	            	else
+	            	{
+	            		markerCountNotDetected++;	
+	            	}
+	                System.out.println("marker: "+markerCountNotDetected);
 
+	            	
 	            	for(int i = 0; i < circles.total(); i++){
 	            		CvPoint3D32f circle = new CvPoint3D32f(cvGetSeqElem(circles, i));
 	            		
